@@ -1,129 +1,80 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+import numpy as np
+from keras.layers import Input, Dense
+from keras.models import Model
+from keras.datasets import mnist
+import matplotlib.pyplot as plt
 
-# C extensions
-*.so
+#this is the size of our encoded representations
+encoding_dim = 32   #32 floats --> compression of factor 24.5, assuming inpur is 784 floats
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+#this is our input placeholder
+input_img = Input(shape=(784,))
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+#encoded is the encoded representation of the input
+encoded = Dense(encoding_dim, activation = 'relu')(input_img)
+ 
+#decoded is the lossy representation of the input
+decoded = Dense(784,activation = 'sigmoid')(encoded)
+ 
+#this model maps the input to its reconstruction
+autoencoder = Model(input_img, decoded)
+ 
+#this model maps an input to its encoded representation
+encoder = Model(input_img, encoded)
+ 
+#create a placeholder for an encoded(32 dimensional )input
+encoded_input = Input(shape = (encoding_dim,))
+ 
+ 
+#retrive the last layer of the autoencoder model
+decoder_layer = autoencoder.layers[-1]
+ 
+#create the decoder model
+decoder= Model(encoded_input, decoder_layer(encoded_input))
+ 
+#configure our model to use a per-pixel binary crossentropy loss, and the Adadela optimizer:
+autoencoder.compile(optimizer = 'adam', loss = 'binary_crossentropy')
+ 
+#prepare our input data. We are using MNIST digits, and we are discarding labels
+(x_train,_),(x_test,_) = mnist.load_data()
+ 
+#normalize all values between 0 and 1 and we will flatten the 28 by 28 images into vectors of size 784.
+x_train = x_train.astype('float32')/255
+x_test = x_test.astype('float32')/255
+x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
+x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
+print(x_train.shape)
+print(x_test.shape)
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
+#train our autoencoder for 50 epochs
+autoencoder.fit(x_train,x_train,
+                epochs =50,
+                batch_size = 256,
+                shuffle = True,
+                validation_data = (x_test, x_test))
+ 
+# encode and decode some digits
+# note that we take them from the 'test' set
+encoded_imgs = encoder.predict(x_test)
+decoded_imgs = decoder.predict(encoded_imgs)
+ 
+#visualize the reconstructed inputs and the encoded representation.use Matplotlib
+n=20 # how many digits we will display
+plt.figure(figsize = (20,4))
+for i in range(n):
+  # display original 
+  ax = plt.subplot(2, n, i+1)
+  plt.imshow(x_test[i].reshape(28,28))
+  plt.gray()
+  ax.get_xaxis().set_visible(False)
+  ax.get_yaxis().set_visible(False)
+ 
+  # display reconstruction 
+  ax = plt.subplot(2,n,i+1+n)
+  plt.imshow(decoded_imgs[i].reshape(28,28))
+  plt.gray()
+  ax.get_xaxis().set_visible(False)
+  ax.get_yaxis().set_visible(False)
+plt.show()
